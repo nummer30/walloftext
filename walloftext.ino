@@ -87,7 +87,7 @@ void loop() {
         utf8char[c] = arr[i+c];
       }
 
-      i += len;
+      i += len-1;
 
       // TODO non-printable characters should probably discarded from the string
 
