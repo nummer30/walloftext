@@ -14,7 +14,7 @@
 
 MatrixPanel_I2S_DMA *dma_display = nullptr;
 
-#define FONT_SIZE 1 // FONT_SIZE x 8px
+#define FONT_SIZE 2 // FONT_SIZE x 8px
 
 #define EMOJI_SIZE 30 //  expected resolution of the bmp files
 #define EMOJI_LIMIT 10 // maximum amount of emojis
@@ -27,6 +27,8 @@ int status = WL_IDLE_STATUS;
 
 uint16_t color_black = dma_display->color565(0, 0, 0);
 uint16_t color_blue = dma_display->color565(0, 0, 255);
+uint16_t color_red = dma_display->color565(255, 0, 0);
+uint16_t color_grey = dma_display->color565(200, 200, 200);
 
 void setup() {
   Serial.begin(115200);
@@ -42,7 +44,7 @@ void setup() {
   dma_display->begin();
   dma_display->fillScreen(color_black);
   dma_display->setTextSize(FONT_SIZE);
-  dma_display->setTextWrap(true);
+  dma_display->setTextWrap(false);
   dma_display->setTextColor(color_blue);
   dma_display->setCursor(1, 1);
   dma_display->setBrightness8(64);
@@ -53,7 +55,7 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while(WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    delay(100);
+    delay(500);
   }
   Serial.println("connected");
 
@@ -63,7 +65,7 @@ void setup() {
 
 struct emoji {
   uint32_t unicode;
-  unsigned int position;
+  int position;
   uint16_t pix[EMOJI_SIZE*EMOJI_SIZE];
 };
 
@@ -79,8 +81,7 @@ void loop() {
   char arr[1024];
   text.toCharArray(arr, 1024);
 
-  unsigned int p = 0;
-  for (int i = 0; i < 1024; i++, p++) {
+  for (int i = 0; i < 1024; i++) {
     if (arr[i] == 0) {
       break;
     }
@@ -92,7 +93,7 @@ void loop() {
         len++;
         mask = mask << 1;
       }
-      if (len == 4) {
+      if (len >= 3) {
         is_emoji = 1;
       }
 
@@ -101,17 +102,15 @@ void loop() {
         utf8char[c] = arr[i+c];
       }
 
-      i += len-1;
-
-      // TODO non-printable characters should probably discarded from the string
-
       if (is_emoji) {
         uint32_t unicode = utf8_to_unicode(utf8char);
         if (e < EMOJI_LIMIT) {
-          emojis[e] = { unicode, p, 0 };
+          emojis[e] = { unicode, i, 0 };
           e++;
         }
       }
+
+      i += len-1;
     }
   }
 
@@ -120,19 +119,50 @@ void loop() {
     get_emoji(&emojis[i]);
   }
 
-
   uint8_t brightness = fetch_brightness("brightness");
-  dma_display->fillScreen(color_black);
   dma_display->setBrightness8(brightness);
-  dma_display->setCursor(1, 1);
-  //dma_display->println(arr);
-  for (int i = 0; i < e; i++) {
-    draw_emoji(1+i*32, 0, &emojis[i]);
+  dma_display->setTextColor(color_grey);
+
+  int x_len = 0;
+  int c_x = PANE_WIDTH;
+  int c_y = (32-FONT_SIZE*8)/2+1;
+  while (c_x > -x_len) {
+    dma_display->fillScreen(color_black);
+    dma_display->setCursor(c_x, 11);
+    for (int i = 0; i < 1024; i++) {
+      if (arr[i] == 0) {
+        break;
+      }
+
+      dma_display->setCursor(c_x, c_y);
+      if (arr[i] & 128) {
+        for (int j = 0; j < e; j++) {
+          if (emojis[j].position == i) {
+            draw_emoji(c_x, 0, &emojis[j]);
+            c_x += EMOJI_SIZE+FONT_SIZE;
+            break;
+          }
+        }
+        char mask = arr[i];
+        while ((mask << 1) & 128) {
+          i++;
+          mask = mask << 1;
+        }
+      } else {
+        dma_display->print(arr[i]);
+        c_x += 6*FONT_SIZE;
+      }
+    }
+    if (x_len == 0) {
+      x_len = c_x - PANE_WIDTH;
+    }
+    c_x = c_x - x_len - 1;
+    dma_display->showDMABuffer();
+    dma_display->flipDMABuffer();
+    delay(80);
   }
-  dma_display->showDMABuffer();
 
   e = 0;
-  delay(1000);
 }
 
 uint32_t utf8_to_unicode(char utf8char[4]) {
@@ -214,6 +244,7 @@ void get_emoji(struct emoji *e) {
       e->pix[i] += str[i*2];
     }
   } else {
+    e->position = -1;
     for (int i = 0; i < EMOJI_SIZE*EMOJI_SIZE; i++) {
       int x = i % EMOJI_SIZE;
       int y = i / EMOJI_SIZE;
@@ -224,7 +255,6 @@ void get_emoji(struct emoji *e) {
 }
 
 void draw_emoji(int xOff, int yOff, emoji *e) {
-  SerialPrintfln("draw_emoji at text position: %d", e->position);
   for (int i = 0; i < EMOJI_SIZE*EMOJI_SIZE; i++) {
     int x = i % EMOJI_SIZE;
     int y = EMOJI_SIZE-(i/EMOJI_SIZE);
