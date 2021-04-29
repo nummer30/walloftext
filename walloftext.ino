@@ -2,9 +2,17 @@
 #include <ArduinoHttpClient.h>
 #include "utils.h"
 #include "credentials.h"
-
-#define MATRIX_WIDTH 128
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+
+#define PANEL_WIDTH 64
+#define PANEL_HEIGHT 32
+#define PANELS_NUMBER 1
+#define PIN_E 32
+
+#define PANE_WIDTH PANEL_WIDTH * PANELS_NUMBER
+#define PANE_HEIGHT PANEL_HEIGHT
+
+MatrixPanel_I2S_DMA *dma_display = nullptr;
 
 #define FONT_SIZE 1 // FONT_SIZE x 8px
 
@@ -13,26 +21,32 @@
 
 char serverAddress[] = "192.168.1.20";
 int serverPort = 8000;
-MatrixPanel_I2S_DMA dma_display;
 WiFiClient wifi;
 HttpClient client = HttpClient(wifi, serverAddress, serverPort);
 int status = WL_IDLE_STATUS;
 
-uint16_t color_black = dma_display.color565(0, 0, 0);
-uint16_t color_blue = dma_display.color565(0, 0, 255);
+uint16_t color_black = dma_display->color565(0, 0, 0);
+uint16_t color_blue = dma_display->color565(0, 0, 255);
 
 void setup() {
   Serial.begin(115200);
 
+  HUB75_I2S_CFG mxconfig;
+  mxconfig.double_buff = true;
+  mxconfig.mx_height = PANEL_HEIGHT;
+  mxconfig.chain_length = PANELS_NUMBER;
+  mxconfig.gpio.e = PIN_E;
+  dma_display = new MatrixPanel_I2S_DMA(mxconfig);
+
   Serial.println("Setup display");
-  dma_display.begin();
-  dma_display.fillScreen(color_black);
-  dma_display.setTextSize(FONT_SIZE);
-  dma_display.setTextWrap(true);
-  dma_display.setTextColor(color_blue);
-  dma_display.setCursor(1, 1);
-  dma_display.setBrightness8(64);
-  dma_display.print("On.");
+  dma_display->begin();
+  dma_display->fillScreen(color_black);
+  dma_display->setTextSize(FONT_SIZE);
+  dma_display->setTextWrap(true);
+  dma_display->setTextColor(color_blue);
+  dma_display->setCursor(1, 1);
+  dma_display->setBrightness8(64);
+  dma_display->print("On.");
 
   Serial.print("Connecting with Wifi: ");
   Serial.print(WIFI_SSID);
@@ -45,8 +59,6 @@ void setup() {
 
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
-  dma_display.fillScreen(color_black);
 }
 
 struct emoji {
@@ -59,6 +71,8 @@ emoji emojis[EMOJI_LIMIT];
 unsigned short e = 0;
 
 void loop() {
+  dma_display->flipDMABuffer();
+  dma_display->fillScreen(color_black);
   // Get the display content
   String text = fetch_text("content");
 
@@ -108,13 +122,14 @@ void loop() {
 
 
   uint8_t brightness = fetch_brightness("brightness");
-  dma_display.fillScreen(color_black);
-  dma_display.setBrightness8(brightness);
-  dma_display.setCursor(1, 1);
-  //dma_display.println(arr);
+  dma_display->fillScreen(color_black);
+  dma_display->setBrightness8(brightness);
+  dma_display->setCursor(1, 1);
+  //dma_display->println(arr);
   for (int i = 0; i < e; i++) {
     draw_emoji(1+i*32, 0, &emojis[i]);
   }
+  dma_display->showDMABuffer();
 
   e = 0;
   delay(1000);
@@ -213,6 +228,6 @@ void draw_emoji(int xOff, int yOff, emoji *e) {
   for (int i = 0; i < EMOJI_SIZE*EMOJI_SIZE; i++) {
     int x = i % EMOJI_SIZE;
     int y = EMOJI_SIZE-(i/EMOJI_SIZE);
-    dma_display.drawPixel(x + xOff, y + yOff, e->pix[i]);
+    dma_display->drawPixel(x + xOff, y + yOff, e->pix[i]);
   }
 }
