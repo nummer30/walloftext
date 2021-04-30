@@ -49,6 +49,9 @@ void setup() {
   dma_display->setCursor(1, 1);
   dma_display->setBrightness8(64);
   dma_display->print("On.");
+  dma_display->setTextColor(color_grey);
+  dma_display->flipDMABuffer();
+
 
   Serial.print("Connecting with Wifi: ");
   Serial.print(WIFI_SSID);
@@ -73,70 +76,75 @@ emoji emojis[EMOJI_LIMIT];
 // Emoji counter
 unsigned short e = 0;
 
+String old_text;
+
 void loop() {
-  // Text might change, so reset the emoji counter
-  e = 0;
-  dma_display->flipDMABuffer();
   dma_display->fillScreen(color_black);
 
   // Get the display content
   String text = fetch_text("content");
-
   char arr[1024];
   text.toCharArray(arr, 1024);
-  for (int i = 0; i < 1024; i++) {
-    // End of string
-    if (arr[i] == 0) {
-      break;
-    }
-    // First bit is set -> non-ASCII char, probably UTF-8
-    if (arr[i] & 128) {
-      bool is_emoji = 0;
-      uint8_t len = 0;
-      uint8_t mask = arr[i];
-      // Number of leading ones indicates how additional bytes belong to this character
-      while (mask & 128) {
-        len++;
-        mask = mask << 1;
+  if (text.compareTo(old_text) != 0) {
+    // Text changed, so load the new brightness as well
+    uint8_t brightness = fetch_brightness("brightness");
+    dma_display->setBrightness8(brightness);
+    // Text changed, so reset the emoji counter
+    e = 0;
+    for (int i = 0; i < 1024; i++) {
+      // End of string
+      if (arr[i] == 0) {
+        break;
       }
-      // Assume all relevant emojis are at least 3 bytes long, to weed out weird other characters
-      if (len >= 3) {
-        is_emoji = 1;
-      }
-
-      char utf8char[4] = {0, 0, 0, 0};
-      for (int c = 0; c < len; c++) {
-        utf8char[c] = arr[i+c];
-      }
-
-      if (is_emoji) {
-        uint32_t unicode = utf8_to_unicode(utf8char);
-        if (e < EMOJI_LIMIT) {
-          emojis[e] = { unicode, i, 0 };
-          e++;
+      // First bit is set -> non-ASCII char, probably UTF-8
+      if (arr[i] & 128) {
+        bool is_emoji = 0;
+        uint8_t len = 0;
+        uint8_t mask = arr[i];
+        // Number of leading ones indicates how additional bytes belong to this character
+        while (mask & 128) {
+          len++;
+          mask = mask << 1;
         }
+        // Assume all relevant emojis are at least 3 bytes long, to weed out weird other characters
+        if (len >= 3) {
+          is_emoji = 1;
+        }
+
+        char utf8char[4] = {0, 0, 0, 0};
+        for (int c = 0; c < len; c++) {
+          utf8char[c] = arr[i+c];
+        }
+
+        if (is_emoji) {
+          uint32_t unicode = utf8_to_unicode(utf8char);
+          if (e < EMOJI_LIMIT) {
+            emojis[e] = { unicode, i, 0 };
+            e++;
+          }
+        }
+
+        i += len-1;
       }
-
-      i += len-1;
     }
-  }
 
-  // Actually load the files via HTTP
-  for (int i = 0; i < e; i++) {
-    get_emoji(&emojis[i]);
+    // Actually load the files via HTTP
+    for (int i = 0; i < e; i++) {
+      get_emoji(&emojis[i]);
+    }
+  } else {
+    SerialPrintfln("content didn't change");
   }
-
-  uint8_t brightness = fetch_brightness("brightness");
-  dma_display->setBrightness8(brightness);
-  dma_display->setTextColor(color_grey);
 
   int x_len = 0;
+  int centered = 0;
   int c_x = PANE_WIDTH;
   int c_y = (32-FONT_SIZE*8)/2+1;
   // We start at the right end, and print into the area right of the displays.
   // We then repeat, but starting further to the left, until the end of the content
   // leaves at the left side.
-  while (c_x > -x_len) {
+  // Also, if we are centered for more than 5 seconds, check for new content
+  while (c_x > -x_len && centered < 5) {
     dma_display->fillScreen(color_black);
     dma_display->setCursor(c_x, 11);
     for (int i = 0; i < 1024; i++) {
@@ -175,14 +183,25 @@ void loop() {
     // Set x_len during the first loop, so we know how much space everything takes
     if (x_len == 0) {
       x_len = c_x - PANE_WIDTH;
+    } else {
+      // Don't draw the first time, it helps with centered text staying on the display
+      dma_display->showDMABuffer();
+      dma_display->flipDMABuffer();
     }
-    // Reset the cursor position, and move it to the left by one
-    c_x = c_x - x_len - 1;
-    dma_display->showDMABuffer();
-    dma_display->flipDMABuffer();
-    // Don't scroll too fast!
-    delay(80);
+
+    // Decide wether to scroll or to center
+    if (x_len > PANE_WIDTH) {
+      // Reset the cursor position, and move it to the left by one
+      c_x = c_x - x_len - 1;
+      // Don't scroll too fast!
+      delay(80);
+    } else {
+      centered++;
+      c_x = (PANE_WIDTH - x_len) / 2 - 1;
+      delay(1000);
+    }
   }
+  old_text = text;
 }
 
 // Converts a 1-4 byte UTF-8 character to a unicode codepoint
