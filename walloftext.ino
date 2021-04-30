@@ -64,35 +64,42 @@ void setup() {
 }
 
 struct emoji {
-  uint32_t unicode;
-  int position;
-  uint16_t pix[EMOJI_SIZE*EMOJI_SIZE];
+  uint32_t unicode; // Unicode codepoint
+  int position; // Position of the emojis starting char in the content-string
+  uint16_t pix[EMOJI_SIZE*EMOJI_SIZE]; // R5G6B5 pixels
 };
 
 emoji emojis[EMOJI_LIMIT];
+// Emoji counter
 unsigned short e = 0;
 
 void loop() {
+  // Text might change, so reset the emoji counter
+  e = 0;
   dma_display->flipDMABuffer();
   dma_display->fillScreen(color_black);
+
   // Get the display content
   String text = fetch_text("content");
 
   char arr[1024];
   text.toCharArray(arr, 1024);
-
   for (int i = 0; i < 1024; i++) {
+    // End of string
     if (arr[i] == 0) {
       break;
     }
+    // First bit is set -> non-ASCII char, probably UTF-8
     if (arr[i] & 128) {
       bool is_emoji = 0;
       uint8_t len = 0;
       uint8_t mask = arr[i];
+      // Number of leading ones indicates how additional bytes belong to this character
       while (mask & 128) {
         len++;
         mask = mask << 1;
       }
+      // Assume all relevant emojis are at least 3 bytes long, to weed out weird other characters
       if (len >= 3) {
         is_emoji = 1;
       }
@@ -114,7 +121,7 @@ void loop() {
     }
   }
 
-  // Actually load the files
+  // Actually load the files via HTTP
   for (int i = 0; i < e; i++) {
     get_emoji(&emojis[i]);
   }
@@ -126,45 +133,59 @@ void loop() {
   int x_len = 0;
   int c_x = PANE_WIDTH;
   int c_y = (32-FONT_SIZE*8)/2+1;
+  // We start at the right end, and print into the area right of the displays.
+  // We then repeat, but starting further to the left, until the end of the content
+  // leaves at the left side.
   while (c_x > -x_len) {
     dma_display->fillScreen(color_black);
     dma_display->setCursor(c_x, 11);
     for (int i = 0; i < 1024; i++) {
+      // End of content
       if (arr[i] == 0) {
         break;
       }
 
       dma_display->setCursor(c_x, c_y);
+      // It's non-ASCII
       if (arr[i] & 128) {
+        // Check if any of the emojis is supposed to be at that position
         for (int j = 0; j < e; j++) {
           if (emojis[j].position == i) {
             draw_emoji(c_x, 0, &emojis[j]);
+            // Move cursor to the right by EMOJI_SIZE (for the emoji) and
+            // FONT_SIZE for a small gap between the characters
             c_x += EMOJI_SIZE+FONT_SIZE;
             break;
           }
         }
+        // Move index by the *additional* length of the UTF-8 char
         char mask = arr[i];
         while ((mask << 1) & 128) {
           i++;
           mask = mask << 1;
         }
       } else {
+        // Just print the character
         dma_display->print(arr[i]);
+        // Move the cursor to the right. Each character is 5*FONT_SIZE in width,
+        // plus additionally 1*FONT_SIZE for the gap between characters
         c_x += 6*FONT_SIZE;
       }
     }
+    // Set x_len during the first loop, so we know how much space everything takes
     if (x_len == 0) {
       x_len = c_x - PANE_WIDTH;
     }
+    // Reset the cursor position, and move it to the left by one
     c_x = c_x - x_len - 1;
     dma_display->showDMABuffer();
     dma_display->flipDMABuffer();
+    // Don't scroll too fast!
     delay(80);
   }
-
-  e = 0;
 }
 
+// Converts a 1-4 byte UTF-8 character to a unicode codepoint
 uint32_t utf8_to_unicode(char utf8char[4]) {
   uint32_t codepoint = 0;
   uint8_t len = 0;
@@ -174,7 +195,6 @@ uint32_t utf8_to_unicode(char utf8char[4]) {
     mask = mask << 1;
   } while (mask & 128);
 
-  // first byte
   switch (len) {
     case 1:
       codepoint = utf8char[0] & 0b01111111;
@@ -235,15 +255,19 @@ void get_emoji(struct emoji *e) {
   if (statusCode == 200) {
     String response = client.responseBody();
     const char *str = response.c_str();
+    // Apparently, the bmp header is 66 bytes. This might change if the bmp file
+    // has been generated using other tools
     str = str+66;
     for (int i = 0; i < EMOJI_SIZE*EMOJI_SIZE; i++) {
       int x = i % EMOJI_SIZE;
+      // BMPs are drawn bottom to top
       int y = 31 - (i / EMOJI_SIZE);
       e->pix[i] = str[i*2+1];
       e->pix[i] = e->pix[i] << 8;
       e->pix[i] += str[i*2];
     }
   } else {
+    // This emoji can't be drawn, so set the position to -1
     e->position = -1;
     for (int i = 0; i < EMOJI_SIZE*EMOJI_SIZE; i++) {
       int x = i % EMOJI_SIZE;
