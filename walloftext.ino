@@ -182,7 +182,8 @@ void loop() {
     }
     // Set x_len during the first loop, so we know how much space everything takes
     if (x_len == 0) {
-      x_len = c_x - PANE_WIDTH;
+      // Substract the last gap (1*FONT_SIZE)
+      x_len = c_x - PANE_WIDTH - FONT_SIZE;
     } else {
       // Don't draw the first time, it helps with centered text staying on the display
       dma_display->showDMABuffer();
@@ -197,7 +198,7 @@ void loop() {
       delay(80);
     } else {
       centered++;
-      c_x = (PANE_WIDTH - x_len) / 2 - 1;
+      c_x = (PANE_WIDTH - x_len) / 2;
       delay(1000);
     }
   }
