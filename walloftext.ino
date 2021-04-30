@@ -144,7 +144,7 @@ void loop() {
   // We then repeat, but starting further to the left, until the end of the content
   // leaves at the left side.
   // Also, if we are centered for more than 5 seconds, check for new content
-  while (c_x > -x_len && centered < 5) {
+  while (c_x >= -x_len && centered < 5) {
     dma_display->fillScreen(color_black);
     dma_display->setCursor(c_x, 11);
     for (int i = 0; i < 1024; i++) {
@@ -193,7 +193,8 @@ void loop() {
     // Decide wether to scroll or to center
     if (x_len > PANE_WIDTH) {
       // Reset the cursor position, and move it to the left by one
-      c_x = c_x - x_len - 1;
+      // Subtract the length, the gap after the last character, and one
+      c_x = c_x - x_len - FONT_SIZE - 1;
       // Don't scroll too fast!
       delay(80);
     } else {
