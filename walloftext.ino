@@ -6,7 +6,7 @@
 
 #define PANEL_WIDTH 64
 #define PANEL_HEIGHT 32
-#define PANELS_NUMBER 1
+#define PANELS_NUMBER 2
 #define PIN_E 32
 
 #define PANE_WIDTH PANEL_WIDTH * PANELS_NUMBER
@@ -81,14 +81,14 @@ String old_text;
 void loop() {
   dma_display->fillScreen(color_black);
 
+  // Get the new brightness
+  uint8_t brightness = fetch_brightness("brightness");
+  dma_display->setBrightness8(brightness);
   // Get the display content
   String text = fetch_text("content");
   char arr[1024];
   text.toCharArray(arr, 1024);
   if (text.compareTo(old_text) != 0) {
-    // Text changed, so load the new brightness as well
-    uint8_t brightness = fetch_brightness("brightness");
-    dma_display->setBrightness8(brightness);
     // Text changed, so reset the emoji counter
     e = 0;
     for (int i = 0; i < 1024; i++) {
