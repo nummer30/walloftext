@@ -17,7 +17,7 @@ MatrixPanel_I2S_DMA *dma_display = nullptr;
 #define FONT_SIZE 2 // FONT_SIZE x 8px
 
 #define EMOJI_SIZE 30 //  expected resolution of the bmp files
-#define EMOJI_LIMIT 10 // maximum amount of emojis
+#define EMOJI_LIMIT 30 // maximum amount of emojis
 
 char serverAddress[] = "192.168.1.20";
 int serverPort = 8000;
