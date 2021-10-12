@@ -6,7 +6,7 @@
 
 #define PANEL_WIDTH 64
 #define PANEL_HEIGHT 32
-#define PANELS_NUMBER 2
+#define PANELS_NUMBER 3
 #define PIN_E 32
 
 #define PANE_WIDTH PANEL_WIDTH * PANELS_NUMBER
@@ -19,8 +19,8 @@ MatrixPanel_I2S_DMA *dma_display = nullptr;
 #define EMOJI_SIZE 30 //  expected resolution of the bmp files
 #define EMOJI_LIMIT 30 // maximum amount of emojis
 
-char serverAddress[] = "192.168.1.20";
-int serverPort = 8000;
+char serverAddress[] = "192.168.1.3";
+int serverPort = 80;
 WiFiClient wifi;
 HttpClient client = HttpClient(wifi, serverAddress, serverPort);
 int status = WL_IDLE_STATUS;
@@ -38,6 +38,8 @@ void setup() {
   mxconfig.mx_height = PANEL_HEIGHT;
   mxconfig.chain_length = PANELS_NUMBER;
   mxconfig.gpio.e = PIN_E;
+  mxconfig.latch_blanking = 4;
+  mxconfig.clkphase = false;
   dma_display = new MatrixPanel_I2S_DMA(mxconfig);
 
   Serial.println("Setup display");
@@ -82,10 +84,10 @@ void loop() {
   dma_display->fillScreen(color_black);
 
   // Get the new brightness
-  uint8_t brightness = fetch_brightness("brightness");
+  uint8_t brightness = fetch_brightness("/brightness");
   dma_display->setBrightness8(brightness);
   // Get the display content
-  String text = fetch_text("content");
+  String text = fetch_text("/content");
   char arr[1024];
   text.toCharArray(arr, 1024);
   if (text.compareTo(old_text) != 0) {
@@ -186,8 +188,8 @@ void loop() {
       x_len = c_x - PANE_WIDTH - FONT_SIZE;
     } else {
       // Don't draw the first time, it helps with centered text staying on the display
-      dma_display->showDMABuffer();
       dma_display->flipDMABuffer();
+      dma_display->clearScreen();
     }
 
     // Decide wether to scroll or to center
@@ -268,7 +270,7 @@ uint8_t fetch_brightness(String file) {
 
 void get_emoji(struct emoji *e) {
   char file[128];
-  sprintf(file, "emojis/%x.bmp", e->unicode);
+  sprintf(file, "/emojis/%x.bmp", e->unicode);
   client.get(file);
   int statusCode = client.responseStatusCode();
   SerialPrintfln("get_emoji: GET %s - %d", file, statusCode);
