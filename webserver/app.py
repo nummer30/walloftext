@@ -3,7 +3,7 @@
 from flask import Flask, render_template, request
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
-from wtforms.fields.html5 import IntegerRangeField
+from wtforms.fields import IntegerRangeField
 import time
 import os.path
 
