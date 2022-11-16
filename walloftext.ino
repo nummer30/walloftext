@@ -19,7 +19,7 @@ MatrixPanel_I2S_DMA *dma_display = nullptr;
 #define EMOJI_SIZE 30 //  expected resolution of the bmp files
 #define EMOJI_LIMIT 30 // maximum amount of emojis
 
-char serverAddress[] = "192.168.1.3";
+char serverAddress[] = "192.168.1.5";
 int serverPort = 80;
 WiFiClient wifi;
 HttpClient client = HttpClient(wifi, serverAddress, serverPort);
@@ -38,8 +38,7 @@ void setup() {
   mxconfig.mx_height = PANEL_HEIGHT;
   mxconfig.chain_length = PANELS_NUMBER;
   mxconfig.gpio.e = PIN_E;
-  mxconfig.latch_blanking = 4;
-  mxconfig.clkphase = false;
+  mxconfig.min_refresh_rate = 255;
   dma_display = new MatrixPanel_I2S_DMA(mxconfig);
 
   Serial.println("Setup display");
@@ -198,7 +197,7 @@ void loop() {
       // Subtract the length, the gap after the last character, and one
       c_x = c_x - x_len - FONT_SIZE - 1;
       // Don't scroll too fast!
-      delay(80);
+      delay(70);
     } else {
       centered++;
       c_x = (PANE_WIDTH - x_len) / 2;
