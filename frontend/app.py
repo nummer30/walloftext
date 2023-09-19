@@ -5,7 +5,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
 from wtforms.fields import IntegerRangeField
 import time
-import os.path
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'filesystem'
@@ -19,6 +19,11 @@ class UpdateForm(FlaskForm):
 @app.route("/", methods=['GET', 'POST'])
 def main():
     form = UpdateForm()
+
+    if not os.path.exists("content"):
+        os.mknod("content");
+    if not os.path.exists("brightness"):
+        os.mknod("brightness");
 
     if request.method == 'GET':
         with open("brightness", "r") as fd:
@@ -57,6 +62,12 @@ def brightness():
         with open("brightness", "r") as fd:
             brightness = int(fd.readlines()[0])
         return str(brightness)
+
+@app.route("/content", methods=['GET'])
+def content():
+    with open("content", "r") as fd:
+        content = fd.readlines()[0]
+    return content
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
